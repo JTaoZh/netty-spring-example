@@ -15,6 +15,8 @@
  */
 package com.zbum.example.socket.server.netty.handler;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
@@ -46,9 +48,13 @@ public class SomethingChannelInitializer extends ChannelInitializer<SocketChanne
     @Override
     protected void initChannel(SocketChannel socketChannel) throws Exception {
         ChannelPipeline pipeline = socketChannel.pipeline();
+        //@TODO 修改合适的结束符
+        ByteBuf delimiter = Unpooled.copiedBuffer(new byte[]{(byte) 0xff, (byte) 0xff});
 
         // Add the text line codec combination first,
-        pipeline.addLast(new DelimiterBasedFrameDecoder(1024*1024, Delimiters.lineDelimiter()));
+        pipeline.addLast(new DelimiterBasedFrameDecoder(1024*1024,
+                /*Delimiters.lineDelimiter()*/
+                delimiter));
         // the encoder and decoder are static as these are sharable
         pipeline.addLast(DECODER);
         pipeline.addLast(ENCODER);

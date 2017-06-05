@@ -16,7 +16,12 @@
 package com.zbum.example.socket.server.netty.handler;
 
 import com.zbum.example.socket.server.netty.ChannelRepository;
+import com.zbum.example.socket.server.web.entity.Device;
+import com.zbum.example.socket.server.web.entity.Msg;
+import com.zbum.example.socket.server.web.repository.DeviceRepository;
+import com.zbum.example.socket.server.web.repository.MsgRepository;
 import io.netty.channel.ChannelHandler;
+import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import org.apache.log4j.Logger;
@@ -24,6 +29,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
+
+import java.util.Arrays;
 
 /**
  * event handler to process receiving messages
@@ -38,6 +45,12 @@ public class SomethingServerHandler extends ChannelInboundHandlerAdapter {
     @Autowired
     private ChannelRepository channelRepository;
 
+    @Autowired
+    private DeviceRepository deviceRepository;
+
+    @Autowired
+    private MsgRepository msgRepository;
+
     private static Logger logger = Logger.getLogger(SomethingServerHandler.class.getName());
 
     @Override
@@ -49,6 +62,15 @@ public class SomethingServerHandler extends ChannelInboundHandlerAdapter {
         String channelKey = ctx.channel().remoteAddress().toString();
         channelRepository.put(channelKey, ctx.channel());
 
+        Device device = deviceRepository.findDeviceByChannelKey(channelKey);
+        if (device == null)
+            deviceRepository.save(new Device(channelKey, true));
+        else {
+            device.setOnline(true);
+            deviceRepository.save(device);
+        }
+
+        //initial write to client
         ctx.writeAndFlush("Your channel key is " + channelKey + "\n\r");
 
         logger.debug("Binded Channel Count is " + this.channelRepository.size());
@@ -57,19 +79,12 @@ public class SomethingServerHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         String stringMessage = (String) msg;
+        byte[] bytes = ((String) msg).getBytes();
+        String channelKey = ctx.channel().remoteAddress().toString();
+        logger.debug(channelKey + ": " + Arrays.toString(bytes));
+        Device device = deviceRepository.findDeviceByChannelKey(channelKey);
 
-        logger.debug(stringMessage);
-
-        String[] splitMessage = stringMessage.split("::");
-
-        if ( splitMessage.length != 2 ) {
-            ctx.channel().writeAndFlush(stringMessage + "\n\r");
-            return;
-        }
-
-        if ( channelRepository.get(splitMessage[0]) != null ) {
-            channelRepository.get(splitMessage[0]).writeAndFlush(splitMessage[1] + "\n\r");
-        }
+        msgRepository.save(new Msg(device, stringMessage));
     }
 
     @Override
@@ -85,6 +100,9 @@ public class SomethingServerHandler extends ChannelInboundHandlerAdapter {
 
         String channelKey = ctx.channel().remoteAddress().toString();
         this.channelRepository.remove(channelKey);
+        Device device = this.deviceRepository.findDeviceByChannelKey(channelKey);
+        device.setOnline(false);
+        this.deviceRepository.save(device);
 
         logger.debug("Binded Channel Count is " + this.channelRepository.size());
     }
